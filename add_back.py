@@ -1,38 +1,70 @@
 
 
+
+# note that this script assumes that all the images 
+# have the same dimensions and transparency (alpha channel) 
+# for proper layering.
+
 import os
 import itertools
 from PIL import Image
 
-def load_image_files(directory, extension='png'):
+def load_image_files(directory, category, images_per_cat):
     image_paths = []
-    for filename in os.listdir(directory):
-        if filename.endswith(extension):
-            image_paths.append(os.path.join(directory, filename))
+    for i in range(1, int(images_per_cat) + 1):
+        filename = f"{category}{i}.png"
+        image_paths.append(os.path.join(directory, filename))
     return image_paths
 
-def layer_images(base_image_path, overlay_image_path):
-    base_image = Image.open(base_image_path).convert('RGBA')
-    overlay_image = Image.open(overlay_image_path).resize(base_image.size, Image.ANTIALIAS)
-    combined_image = Image.alpha_composite(base_image, overlay_image)
-    return combined_image
+def layer_images(image_paths):
+    human = 'samples/Human.jpg'
+    # convert Human.jpg it to RGBA like other images 
+    base_image = Image.open(human)
+    base_image_size = base_image.size
+    for path in image_paths:
+        img = Image.open(path)
+        if img.mode == "RGB": # backgrounds are RGB
+            img = img.convert('RGBA')
+            back_size = img.size 
+            base_image.resize(back_size, Image.LANCZOS)
+            base_image = Image.alpha_composite(img, base_image)
+        else:
+            img = img.resize(base_image_size, Image.LANCZOS)
+            base_image = Image.alpha_composite(base_image, img)
+    return base_image 
 
 def save_image(image, filename):
     image.save(filename, 'PNG')
 
-def main():
-    background_directory = 'backs'
-    rgba_directory = 'output'
-    output_directory = 'nftwithback'
+def gen(cat, images_per_cat):
+    images_directory = 'samples'
+    output_directory = 'output'
 
-    background_images = load_image_files(background_directory)
-    rgba_images = load_image_files(rgba_directory)
+    categories = cat
+    image_combinations = []
 
-    for bg_img_path, rgba_img_path in itertools.product(background_images, rgba_images):
-        combined_image = layer_images(bg_img_path, rgba_img_path)
-        output_filename = f"Combined_{os.path.basename(bg_img_path).split('.')[0]}_{os.path.basename(rgba_img_path).split('.')[0]}.png"
-        save_image(combined_image, os.path.join(output_directory, output_filename))
+    # Load image paths from each category
+    for category, count in zip(categories, images_per_cat):
+        image_combinations.append(load_image_files(images_directory, category, count))
+        
+    # Combine all images considering all possibilities
+    for combo in itertools.product(*image_combinations):
+        # Skip combinations with both hair and hat images
+        hair_image = any(img_path.startswith(os.path.join(images_directory, 'Hair')) for img_path in combo)
+        hat_image = any(img_path.startswith(os.path.join(images_directory, 'Hat')) for img_path in combo)
+        if hair_image and hat_image:
+            print("only hair or hat")
+            continue
+        layered_image = layer_images(combo)
+        output_filename = "_".join([os.path.basename(img_path).split('.')[0] for img_path in combo]) + ".png"
+        save_image(layered_image, os.path.join(output_directory, output_filename))
+
 
 if __name__ == '__main__':
-    main()
+
+    cats = input('categories: ').split(", ") # Beards, Clothes, Eyewear, Hair, Hat, Mask => ['Beards', 'Clothes', 'Eyewear', 'Hair', 'Hat', 'Mask'] 
+    image_per_cat = input('list of images per category: ').split(", ") # 5, 5, 5, 5, 2
+    
+    gen(cats, image_per_cat)
+    
     
